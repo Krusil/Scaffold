@@ -1,71 +1,157 @@
 "use client";
+import { useState, useEffect } from "react";
+import { useScaffoldReadContract, useScaffoldWriteContract } from "../hooks/scaffold-eth";
 
-import Link from "next/link";
-import type { NextPage } from "next";
-import { useAccount } from "wagmi";
-import { BugAntIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
-import { Address } from "~~/components/scaffold-eth";
+const HomePage = () => {
+    const [candidates, setCandidates] = useState([]);
+    const [selectedCandidate, setSelectedCandidate] = useState(0);
+    const [isVoting, setIsVoting] = useState(false);
 
-const Home: NextPage = () => {
-  const { address: connectedAddress } = useAccount();
+    // Чтение кандидатов из контракта
+    const { data: candidatesData } = useScaffoldReadContract({
+        contractName: "YourContract",
+        functionName: "getCandidates",
+    });
 
-  return (
-    <>
-      <div className="flex items-center flex-col flex-grow pt-10">
-        <div className="px-5">
-          <h1 className="text-center">
-            <span className="block text-2xl mb-2">Welcome to</span>
-            <span className="block text-4xl font-bold">Scaffold-ETH 2</span>
-          </h1>
-          <div className="flex justify-center items-center space-x-2 flex-col sm:flex-row">
-            <p className="my-2 font-medium">Connected Address:</p>
-            <Address address={connectedAddress} />
-          </div>
-          <p className="text-center text-lg">
-            Get started by editing{" "}
-            <code className="italic bg-base-300 text-base font-bold max-w-full break-words break-all inline-block">
-              packages/nextjs/app/page.tsx
-            </code>
-          </p>
-          <p className="text-center text-lg">
-            Edit your smart contract{" "}
-            <code className="italic bg-base-300 text-base font-bold max-w-full break-words break-all inline-block">
-              YourContract.sol
-            </code>{" "}
-            in{" "}
-            <code className="italic bg-base-300 text-base font-bold max-w-full break-words break-all inline-block">
-              packages/hardhat/contracts
-            </code>
-          </p>
-        </div>
+    // Запись в контракт (голосование)
+    const { writeContractAsync: vote } = useScaffoldWriteContract("YourContract");
 
-        <div className="flex-grow bg-base-300 w-full mt-16 px-8 py-12">
-          <div className="flex justify-center items-center gap-12 flex-col sm:flex-row">
-            <div className="flex flex-col bg-base-100 px-10 py-10 text-center items-center max-w-xs rounded-3xl">
-              <BugAntIcon className="h-8 w-8 fill-secondary" />
-              <p>
-                Tinker with your smart contract using the{" "}
-                <Link href="/debug" passHref className="link">
-                  Debug Contracts
-                </Link>{" "}
-                tab.
-              </p>
+    // Обновление списка кандидатов при изменении данных
+    useEffect(() => {
+        if (candidatesData) {
+            const formattedCandidates = candidatesData.map(candidate => ({
+                name: candidate.name,
+                voteCount: candidate.voteCount.toString(),
+            }));
+            setCandidates(formattedCandidates);
+        }
+    }, [candidatesData]);
+
+    // Обработчик события голосования
+    const handleVote = async () => {
+        try {
+            setIsVoting(true);
+            await vote({
+                functionName: 'vote',
+                args: [selectedCandidate],
+            });
+            alert("Ваш голос учтен!");
+        } catch (error) {
+            console.error(error);
+            alert("Ошибка при голосовании. Пожалуйста, попробуйте позже.");
+        } finally {
+            setIsVoting(false);
+        }
+    };
+
+    // Рендеринг интерфейса
+    return (
+        <div style={styles.container}>
+            <h1 style={styles.title}>Голосование</h1>
+            <div style={styles.voteSection}>
+                <h2>Выберите кандидата:</h2>
+                <select
+                    style={styles.select}
+                    onChange={(e) => setSelectedCandidate(parseInt(e.target.value))}
+                >
+                    {candidates.map((candidate, index) => (
+                        <option key={index} value={index}>
+                            {candidate.name}
+                        </option>
+                    ))}
+                </select>
+                <button
+                    onClick={handleVote}
+                    disabled={isVoting}
+                    style={isVoting ? styles.buttonDisabled : styles.button}
+                >
+                    {isVoting ? "Голосуем..." : "Голосовать"}
+                </button>
             </div>
-            <div className="flex flex-col bg-base-100 px-10 py-10 text-center items-center max-w-xs rounded-3xl">
-              <MagnifyingGlassIcon className="h-8 w-8 fill-secondary" />
-              <p>
-                Explore your local transactions with the{" "}
-                <Link href="/blockexplorer" passHref className="link">
-                  Block Explorer
-                </Link>{" "}
-                tab.
-              </p>
+
+            <div style={styles.resultsSection}>
+                <h2>Результаты голосования</h2>
+                <table style={styles.table}>
+                    <thead>
+                    <tr>
+                        <th style={styles.tableHeader}>Кандидат</th>
+                        <th style={styles.tableHeader}>Количество голосов</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {candidates.map((candidate, index) => (
+                        <tr key={index}>
+                            <td style={styles.tableCell}>{candidate.name}</td>
+                            <td style={styles.tableCell}>{candidate.voteCount}</td>
+                        </tr>
+                    ))}
+                    </tbody>
+                </table>
             </div>
-          </div>
         </div>
-      </div>
-    </>
-  );
+    );
 };
 
-export default Home;
+// Стили
+const styles = {
+    container: {
+        padding: "20px",
+        maxWidth: "800px",
+        margin: "0 auto",
+        fontFamily: "Arial, sans-serif",
+    },
+    title: {
+        textAlign: "center",
+        fontSize: "2rem",
+        marginBottom: "20px",
+    },
+    voteSection: {
+        marginBottom: "30px",
+    },
+    select: {
+        width: "100%",
+        padding: "10px",
+        fontSize: "16px",
+        marginBottom: "10px",
+    },
+    button: {
+        width: "100%",
+        padding: "10px",
+        backgroundColor: "#007bff",
+        color: "white",
+        border: "none",
+        borderRadius: "5px",
+        cursor: "pointer",
+        fontSize: "16px",
+    },
+    buttonDisabled: {
+        width: "100%",
+        padding: "10px",
+        backgroundColor: "black",
+        color: "white",
+        border: "none",
+        borderRadius: "5px",
+        cursor: "not-allowed",
+        fontSize: "16px",
+    },
+    resultsSection: {
+        marginTop: "20px",
+    },
+    table: {
+        width: "100%",
+        borderCollapse: "collapse",
+    },
+    tableHeader: {
+        borderBottom: "2px solid #000",
+        textAlign: "center",
+        padding: "10px",
+        backgroundColor: "green",
+    },
+    tableCell: {
+        borderBottom: "1px solid #ccc",
+        padding: "10px",
+        textAlign: "center",
+    },
+};
+
+export default HomePage;
